@@ -190,29 +190,35 @@ int add_user(const char *filename, const char *username, const char *password) {
    Returns max ID + 1 from file
    ========================================================= */
 int get_next_id(const char *filename) {
-    int fd = open(filename, O_RDONLY);
-    if (fd == -1) {
-        // File doesn’t exist yet; start with ID = 1
-        return 1;
-    }
+    int fd = open(filename, O_RDONLY | O_CREAT, 0644);
+    if (fd == -1) return 1;
 
-    lock_file(fd, F_RDLCK);
-
-    char line[256];
+    char line[512];
     int id, max_id = 0;
-    char uname[64], pass[64];
 
+    // read each line and extract only the first integer
     while (read_line(fd, line, sizeof(line)) > 0) {
-        if (sscanf(line, "%d %63s %63s", &id, uname, pass) == 3) {
+        if (sscanf(line, "%d", &id) == 1) {  // only read the first number
             if (id > max_id)
                 max_id = id;
         }
     }
-
-    unlock_file(fd);
     close(fd);
 
-    
+    // assign unique range per file
+    int base = 0;
+    if      (strstr(filename, "admin")    != NULL) base = 100;
+    else if (strstr(filename, "manager")  != NULL) base = 200;
+    else if (strstr(filename, "employee") != NULL) base = 300;
+    else if (strstr(filename, "customer") != NULL) base = 400;
+    else if (strstr(filename, "account")  != NULL) base = 500;
+    else if (strstr(filename, "loan")     != NULL) base = 600;
+    else if (strstr(filename, "feedback") != NULL) base = 700;
+    else base = 1000;
+
+    if (max_id < base)
+        max_id = base;
+
     return max_id + 1;
 }
 

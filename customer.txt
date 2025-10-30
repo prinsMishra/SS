@@ -2,3 +2,6 @@
 2 customer2 customer2@ 1
 5 user2 user2@@ 0
 6 user3 user3@@ 1
+7 1 virat 1
+8 rohit rohit@ 1
+9 virat virat@ 1

@@ -22,7 +22,8 @@ typedef struct {
     char username[MAX_USERNAME];     // Username
     char password[MAX_PASSWORD];     // Password
     UserRole role;                   // Role type
-    int active;                      // 1 = active, 0 = deactivated
+    int active;      
+    int logged_in;                // 1 = active, 0 = deactivated
 } User;
 
 // ---- Customer account ----
