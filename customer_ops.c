@@ -600,6 +600,48 @@ void add_feedback(int connfd, const char *username) {
     send_message(connfd, "✅ Thank you! Your feedback has been recorded.\n");
 }
 
+void view_transaction_history(int connfd, const char *username) {
+    int fd = open("transactions_db.txt", O_RDONLY | O_CREAT, 0644);
+    if (fd < 0) {
+        send_message(connfd, "Error: Cannot open transaction_db.txt\n");
+        return;
+    }
+
+    sem_wait(sem_account); // protect concurrent access
+
+    char line[512];
+    int found = 0;
+
+    while (read_line(fd, line, sizeof(line)) > 0) {
+        if (strlen(line) < 3) continue;
+
+        int tx_id;
+        char uname[64], tx_type[32], timestamp[64];
+        double amount, balance;
+
+        // Format: <tx_id> <username> <tx_type> <amount> <timestamp> <balance>
+        int parsed = sscanf(line, "%d %63s %31s %lf %63s %lf",
+                            &tx_id, uname, tx_type, &amount, timestamp, &balance);
+
+        if (parsed == 6 && strcmp(uname, username) == 0) {
+            char msg[512];
+            snprintf(msg, sizeof(msg),
+                     "Txn ID: %d | Type: %s | Amount: %.2f | Time: %s | Balance: %.2f\n",
+                     tx_id, tx_type, amount, timestamp, balance);
+            send_message(connfd, msg);
+            found = 1;
+        }
+    }
+
+    sem_post(sem_account);
+    close(fd);
+
+    if (!found)
+        send_message(connfd, "No transactions found for your account.\n");
+    else
+        send_message(connfd, "---- End of Transaction History ----\n");
+
+}
 
 
 
@@ -658,9 +700,9 @@ void customer_menu(int connfd, const char *username) {
              case 7:
               add_feedback(connfd, username);
               break;
-            // case 8:
-            //     view_transaction_history(connfd, username);
-            //     break;
+             case 8:
+               view_transaction_history(connfd, username);
+                break;
             case 9:
                 send_message(connfd, "Logging out...\n");
                 return;

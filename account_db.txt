@@ -2,6 +2,6 @@
 2 1 0
 3 user2 5000
 4 user3 15999
-5 rohit 7768
+5 rohit 12768
 6 virat 21199
 7 dhoni 15012

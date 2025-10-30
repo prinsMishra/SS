@@ -383,6 +383,176 @@ void approve_reject_loan(int connfd, const char *username) {
     send_message(connfd, "✅ Loan status updated successfully!\n");
 }
 
+void view_customer_transactions(int connfd) {
+    char cust_username[64];
+
+    // Ask for customer username
+    send_message(connfd, "Enter the customer's username: ");
+    if (receive_message(connfd, cust_username, sizeof(cust_username)) <= 0)
+        return;
+    trim_newline(cust_username);
+
+    int fd = open("transactions_db.txt", O_RDONLY | O_CREAT, 0644);
+    if (fd < 0) {
+        send_message(connfd, "Error: Cannot open transaction_db.txt\n");
+        return;
+    }
+
+    sem_wait(sem_account);  // protect file access
+
+    char line[512];
+    int found = 0;
+
+    // Read line-by-line
+    while (read_line(fd, line, sizeof(line)) > 0) {
+        if (strlen(line) < 3) continue;
+
+        int tx_id;
+        char uname[64], tx_type[32], timestamp[64];
+        double amount, balance;
+
+        // Parse transaction line
+        int parsed = sscanf(line, "%d %63s %31s %lf %63s %lf",
+                            &tx_id, uname, tx_type, &amount, timestamp, &balance);
+
+        // Match username
+        if (parsed == 6 && strcmp(uname, cust_username) == 0) {
+            char msg[512];
+            snprintf(msg, sizeof(msg),
+                     "Txn ID: %d | Type: %s | Amount: %.2f | Time: %s | Balance: %.2f\n",
+                     tx_id, tx_type, amount, timestamp, balance);
+            send_message(connfd, msg);
+            found = 1;
+        }
+    }
+
+    sem_post(sem_account);
+    close(fd);
+
+    if (!found)
+        send_message(connfd, "No transactions found for this customer.\n");
+    else
+        send_message(connfd, "---- End of Customer Transactions ----\n");
+}
+
+  
+void change_employee_password(int connfd) {
+    char username[64], old_pass[64], new_pass[64];
+    char buffer[512], line[256];
+    char temp_file[] = "temp_emp.txt";
+    int fd_read = -1, fd_write = -1;
+    ssize_t bytes;
+    int pos = 0;
+    int found = 0;
+
+    send_message(connfd, "Enter your employee username: ");
+    if (receive_message(connfd, username, sizeof(username)) <= 0) return;
+    trim_newline(username);
+
+    send_message(connfd, "Enter your current password: ");
+    if (receive_message(connfd, old_pass, sizeof(old_pass)) <= 0) return;
+    trim_newline(old_pass);
+
+    send_message(connfd, "Enter your new password: ");
+    if (receive_message(connfd, new_pass, sizeof(new_pass)) <= 0) return;
+    trim_newline(new_pass);
+
+    sem_wait(sem_userdb);
+
+    fd_read = open("employee.txt", O_RDONLY);
+    if (fd_read < 0) {
+        sem_post(sem_userdb);
+        send_message(connfd, "Error opening Employee file.\n");
+        return;
+    }
+
+    fd_write = open(temp_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd_write < 0) {
+        close(fd_read);
+        sem_post(sem_userdb);
+        send_message(connfd, "Error creating temp file.\n");
+        return;
+    }
+
+    pos = 0;
+    while ((bytes = read(fd_read, buffer, sizeof(buffer))) > 0) {
+        for (ssize_t i=0;i<bytes;i++) {
+            if (buffer[i] == '\n' || pos >= (int)sizeof(line)-1) {
+                line[pos] = '\0';
+                pos = 0;
+
+                // parse copy
+                char copy[256];
+                strncpy(copy, line, sizeof(copy)-1);
+                copy[sizeof(copy)-1] = '\0';
+
+                char *tok = strtok(copy, " ");
+                if (!tok) { // malformed
+                    write(fd_write, line, strlen(line)); write(fd_write, "\n",1);
+                    continue;
+                }
+                int id = atoi(tok);
+
+                tok = strtok(NULL, " ");
+                if (!tok) { write(fd_write, line, strlen(line)); write(fd_write, "\n",1); continue; }
+                char file_username[128];
+                strncpy(file_username, tok, sizeof(file_username)-1);
+                file_username[sizeof(file_username)-1] = '\0';
+
+                tok = strtok(NULL, " ");
+                if (!tok) { write(fd_write, line, strlen(line)); write(fd_write, "\n",1); continue; }
+                char file_password[128];
+                strncpy(file_password, tok, sizeof(file_password)-1);
+                file_password[sizeof(file_password)-1] = '\0';
+
+                tok = strtok(NULL, " ");
+                if (!tok) { write(fd_write, line, strlen(line)); write(fd_write, "\n",1); continue; }
+                int active = atoi(tok);
+
+                if (strcmp(file_username, username) == 0 && strcmp(file_password, old_pass) == 0) {
+                    found = 1;
+                    // write updated record
+                    char id_buf[16], act_buf[8];
+                    snprintf(id_buf, sizeof(id_buf), "%d", id);
+                    snprintf(act_buf, sizeof(act_buf), "%d", active);
+
+                    write(fd_write, id_buf, strlen(id_buf));
+                    write(fd_write, " ", 1);
+                    write(fd_write, file_username, strlen(file_username));
+                    write(fd_write, " ", 1);
+                    write(fd_write, new_pass, strlen(new_pass));
+                    write(fd_write, " ", 1);
+                    write(fd_write, act_buf, strlen(act_buf));
+                    write(fd_write, "\n", 1);
+                } else {
+                    // copy as-is
+                    write(fd_write, line, strlen(line));
+                    write(fd_write, "\n", 1);
+                }
+
+            } else {
+                line[pos++] = buffer[i];
+            }
+        }
+    }
+
+    close(fd_read);
+    close(fd_write);
+
+    if (found) {
+        if (rename(temp_file, "employee.txt") != 0) {
+            send_message(connfd, "Error updating employee password.\n");
+            unlink(temp_file);
+        } else {
+            send_message(connfd, "Employee password updated successfully.\n");
+        }
+    } else {
+        unlink(temp_file);
+        send_message(connfd, "Invalid username or password.\n");
+    }
+
+    sem_post(sem_userdb);
+}
 /* ------------------------------------------------------------
    EMPLOYEE MENU
    ------------------------------------------------------------ */
@@ -432,16 +602,16 @@ void employee_menu(int connfd, const char *username) {
                 break;
 
             case 5:
-              //  view_customer_transactions(connfd);
+               view_customer_transactions(connfd);
                 break;
 
             case 6:
-               /// change_employee_password(connfd, username);
+                change_employee_password(connfd);
                 break;
 
             case 7:
                send_message(connfd, "Logging out...\n");
-                return;  // Go back to login screen
+                return;  
                 break;
 
             case 8:

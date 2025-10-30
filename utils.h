@@ -30,5 +30,5 @@ void error_exit(const char *msg);
 int send_message(int sockfd, const char *msg);
 int receive_message(int sockfd, char *buffer, size_t size);
 int check_existing_user(const char *filename, const char *username);
-
+ssize_t read_line(int fd, char *buf, size_t maxlen);
 #endif // UTILS_H
