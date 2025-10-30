@@ -1,6 +1,8 @@
 #include "utils.h"
 #include "Struct.h"
 #include "admin_ops.c"
+#include "manager_ops.c"
+#include "employee_ops.c"
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
@@ -54,50 +56,63 @@ static void reap_children(int sig) {
 static void handle_client(int connfd) {
     char role[BUFSZ], username[BUFSZ], password[BUFSZ];
     char filename[64];
+    int valid;
 
-    send_message(connfd, "Enter role (admin/manager/employee/customer): ");
-    if (receive_message(connfd, role, sizeof(role)) <= 0) _exit(0);
-    trim_newline(role);
+    while (1) {
+        send_message(connfd, "\nEnter role (admin/manager/employee/customer): ");
+        if (receive_message(connfd, role, sizeof(role)) <= 0)
+            break;
+        trim_newline(role);
 
-    send_message(connfd, "Enter username: ");
-    if (receive_message(connfd, username, sizeof(username)) <= 0) _exit(0);
-    trim_newline(username);
+        send_message(connfd, "Enter username: ");
+        if (receive_message(connfd, username, sizeof(username)) <= 0)
+            break;
+        trim_newline(username);
 
-    send_message(connfd, "Enter password: ");
-    if (receive_message(connfd, password, sizeof(password)) <= 0) _exit(0);
-    trim_newline(password);
+        send_message(connfd, "Enter password: ");
+        if (receive_message(connfd, password, sizeof(password)) <= 0)
+            break;
+        trim_newline(password);
 
-    /* Select correct file based on role */
-    if      (strcmp(role, "admin")    == 0) strcpy(filename, "admin.txt");
-    else if (strcmp(role, "manager")  == 0) strcpy(filename, "manager.txt");
-    else if (strcmp(role, "employee") == 0) strcpy(filename, "employee.txt");
-    else if (strcmp(role, "customer") == 0) strcpy(filename, "customer.txt");
-    else {
-        send_message(connfd, "Invalid role.\n");
-        _exit(0);
+        /* Select correct file based on role */
+        if      (strcmp(role, "admin")    == 0) strcpy(filename, "admin.txt");
+        else if (strcmp(role, "manager")  == 0) strcpy(filename, "manager.txt");
+        else if (strcmp(role, "employee") == 0) strcpy(filename, "employee.txt");
+        else if (strcmp(role, "customer") == 0) strcpy(filename, "customer.txt");
+        else {
+            send_message(connfd, "Invalid role.\n");
+            continue;
+        }
+
+        /* ---------- Semaphore region ---------- */
+        sem_wait(sem_userdb);
+        valid = validate_login(filename, username, password);
+        sem_post(sem_userdb);
+        /* -------------------------------------- */
+
+        if (valid) {
+            send_message(connfd, "Login successful!\n");
+
+            if (strcmp(role, "admin" ) == 0)
+                admin_menu(connfd, username);
+            else if (strcmp(role, "manager") == 0)
+                manager_menu(connfd, username);
+            else if (strcmp(role, "employee") == 0)
+                employee_menu(connfd ,username);    
+
+            else
+                send_message(connfd, "No operations implemented for this role yet.\n");
+
+            // after logout (return from menu), continue loop to re-login
+            send_message(connfd, "\nLogged out. Returning to login screen...\n");
+
+        } else {
+            send_message(connfd, "Invalid username or password.\n");
+        }
     }
 
-    /* ---------- Semaphore region ---------- */
-    // lock the user DB files while validating login
-    sem_wait(sem_userdb);
-
-    int valid = validate_login(filename, username, password);
-
-    sem_post(sem_userdb);
-    /* -------------------------------------- */
-
-    if (valid) {
-        send_message(connfd, "Login successful!\n");
-
-          if (strcmp(role, "admin") == 0)
-        admin_menu(connfd);
-    else
-        send_message(connfd, "No operations implemented for this role yet.\n");
-        // later: call appropriate role menu here (admin_menu, manager_menu, etc.)
-    } else {
-        send_message(connfd, "Invalid username or password.\n");
-    }
-
+    // if receive_message() failed or client closed connection:
+    send_message(connfd, "Disconnected from server.\n");
     close(connfd);
     _exit(0);
 }

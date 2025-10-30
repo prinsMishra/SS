@@ -58,6 +58,50 @@ static ssize_t read_line(int fd, char *buf, size_t maxlen) {
    Checks username/password in text DB file.
    Format: <id> <username> <password>
    ========================================================= */
+
+   /* ----------------------------------------------------------
+   check_existing_user()
+   Checks if a username already exists in the given file.
+   Returns 1 if found, 0 if not found, -1 on error.
+   ---------------------------------------------------------- */
+int check_existing_user(const char *filename, const char *username) {
+    int fd = open(filename, O_RDONLY);
+    if (fd == -1) {
+        // If file doesn't exist, no duplicates.
+        return 0;
+    }
+
+    char buf[512], line[256];
+    ssize_t r;
+    int pos = 0;
+
+    while ((r = read(fd, buf, sizeof(buf))) > 0) {
+        for (ssize_t i = 0; i < r; ++i) {
+            if (buf[i] == '\n' || pos >= (int)sizeof(line) - 1) {
+                line[pos] = '\0';
+                pos = 0;
+                if (line[0] != '\0') {
+                    // parse the username token
+                    char copy[256];
+                    strncpy(copy, line, sizeof(copy) - 1);
+                    copy[sizeof(copy) - 1] = '\0';
+                    char *tok = strtok(copy, " "); // skip id
+                    tok = strtok(NULL, " ");       // username
+                    if (tok && strcmp(tok, username) == 0) {
+                        close(fd);
+                        return 1;  // found duplicate
+                    }
+                }
+            } else {
+                line[pos++] = buf[i];
+            }
+        }
+    }
+
+    close(fd);
+    return 0; // not found
+}
+
 int validate_login(const char *filename, const char *username, const char *password) {
     int fd = open(filename, O_RDONLY);
     if (fd < 0) {
@@ -167,6 +211,8 @@ int get_next_id(const char *filename) {
 
     unlock_file(fd);
     close(fd);
+
+    
     return max_id + 1;
 }
 

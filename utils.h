@@ -29,5 +29,6 @@ void error_exit(const char *msg);
 /* ---------- Socket Message Helpers ---------- */
 int send_message(int sockfd, const char *msg);
 int receive_message(int sockfd, char *buffer, size_t size);
+int check_existing_user(const char *filename, const char *username);
 
 #endif // UTILS_H

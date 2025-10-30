@@ -38,8 +38,22 @@ static void add_new_user(int connfd) {
     if (receive_message(connfd, password, sizeof(password)) <= 0) return;
     trim_newline(password);
 
-    // Protect file access
-    sem_wait(sem_userdb);
+    // Protect file 
+     sem_wait(sem_userdb);
+
+    // 🔹 Check for duplicate username before adding
+    int exists = check_existing_user(filename, username);
+    if (exists == 1) {
+        sem_post(sem_userdb);
+        send_message(connfd, "Error: Username already exists!\n");
+        return;
+    } else if (exists == -1) {
+        sem_post(sem_userdb);
+        send_message(connfd, "Error checking username.\n");
+        return;
+    }
+   
+    
 
     if (add_user(filename, username, password))
         send_message(connfd, "User added successfully!\n");
@@ -509,9 +523,13 @@ static void change_admin_password(int connfd) {
 /* ------------------------------------------------------------
    Admin Menu
    ------------------------------------------------------------ */
-void admin_menu(int connfd) {
+void admin_menu(int connfd , const char *username) {
     char choice_str[32];
     int choice;
+
+     char welcome[128];
+    snprintf(welcome, sizeof(welcome), "\nWelcome, %s (Admin)\n", username);
+    send_message(connfd, welcome);
 
     while (1) {
         send_message(connfd,
