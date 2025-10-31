@@ -566,6 +566,9 @@ void admin_menu(int connfd , const char *username) {
                 return; // back to login
             case 6:
                 send_message(connfd, "Exiting system...\n");
+                sem_wait(sem_userdb);
+                mark_user_logged_out("admin.txt", username);
+                sem_post(sem_userdb);
                 _exit(0);
             default:
                 send_message(connfd, "Option not available yet.\n");

@@ -1,7 +1,12 @@
-1 user1 user1@ 0
-2 customer2 customer2@ 1
-5 user2 user2@@ 0
-6 user3 user3@@ 1
-7 1 virat 1
-8 rohit rohit@ 1
-9 virat virat@ 1
+1 user1 user1@ 0 0
+5 user2 user2@@ 0 0
+6 user3 user3@@ 1 0
+7 1 virat 1 0
+8 rohit rohit@ 1 0
+9 virat virat@ 1 0
+401 customer1 customer1@ 1 0
+402 customer3 customer3@ 1 0
+403 customer4 customer4@ 1 0
+401 customer5 customer5@ 1 0
+401 customer6 customer6@ 1 0
+401 customer7 customer7@ 1 0

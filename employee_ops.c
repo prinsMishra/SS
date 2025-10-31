@@ -616,6 +616,9 @@ void employee_menu(int connfd, const char *username) {
 
             case 8:
                 send_message(connfd, "Exiting system...\n");
+                sem_wait(sem_userdb);
+                mark_user_logged_out("employee.txt", username);
+                sem_post(sem_userdb);
                 _exit(0);
                 break;
 

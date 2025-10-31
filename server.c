@@ -282,7 +282,7 @@ static void handle_client(int connfd) {
         sem_post(sem_userdb);
         /* -------------------------------------- */
 
-        if (valid) {
+     if (valid == 1) { // 1 is now SUCCESS
             send_message(connfd, "Login successful!\n");
 
             if (strcmp(role, "admin" ) == 0)
@@ -296,11 +296,18 @@ static void handle_client(int connfd) {
             else
                 send_message(connfd, "No operations implemented for this role yet.\n");
 
+            // LOGOUT STEP: Mark user as logged out in the file after menu returns
+            sem_wait(sem_userdb);
+            mark_user_logged_out(filename, username); // CALL THE NEW FUNCTION
+            sem_post(sem_userdb);
+            
             // after logout (return from menu), continue loop to re-login
             send_message(connfd, "\nLogged out. Returning to login screen...\n");
 
-        } else {
-            send_message(connfd, "Invalid username or password.\n");
+        } else if (valid == -2) { // -2 is now ALREADY LOGGED IN
+            send_message(connfd, "This user is already logged in from another session.\n");
+        } else if (valid == 0) { // 0 is now INVALID CREDENTIALS or INACTIVE
+            send_message(connfd, "Invalid username or password (or account is inactive).\n");
         }
     }
 

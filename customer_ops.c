@@ -708,6 +708,9 @@ void customer_menu(int connfd, const char *username) {
                 return;
             case 10:
                 send_message(connfd, "Exiting system...\n");
+                sem_wait(sem_userdb);
+                mark_user_logged_out("customer.txt", username);
+                sem_post(sem_userdb);
                 _exit(0);
             default:
                 send_message(connfd, "Invalid choice. Try again.\n");

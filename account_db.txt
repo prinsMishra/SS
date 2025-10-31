@@ -1,7 +1,12 @@
 1 1 0
 2 1 0
-3 user2 5000
-4 user3 15999
-5 rohit 12768
-6 virat 21199
+3 user2 27000
+4 user3 15798
+5 rohit 10768
+6 virat 1400
 7 dhoni 15012
+501 customer1 8800
+502 customer3 21200
+503 customer5 299
+504 customer6 2455
+505 customer7 12333

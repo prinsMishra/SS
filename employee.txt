@@ -1,5 +1,5 @@
-1 emp1 emp1@ 1
+1 emp1 emp1@ 1 0
 
 
-3 manager2 manager2@ 1
-4 emp2 emp2@ 1
+3 manager2 manager2@ 1 0
+4 emp2 emp2@ 1 0
