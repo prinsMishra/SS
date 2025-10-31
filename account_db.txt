@@ -10,3 +10,13 @@
 503 customer5 299
 504 customer6 2455
 505 customer7 12333
+506 customer8 200
+507 customer9 100
+508 customer10 122
+509 customer11 1223
+510 customer12 123
+511 user4 1232
+512 user6 733
+513 user7 783
+514 user8 98
+515 user9 211

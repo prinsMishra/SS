@@ -25,6 +25,7 @@ void trim_newline(char *str);
 
 /* ---------- Error Handling ---------- */
 void error_exit(const char *msg);
+int get_next_global_id(const char *key);
 
 /* ---------- Socket Message Helpers ---------- */
 int send_message(int sockfd, const char *msg);

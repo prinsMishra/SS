@@ -55,7 +55,8 @@ void add_new_customer(int connfd) {
     len += sprintf(buf + len, "%d ", new_cust_id);
     len += sprintf(buf + len, "%s ", username);
     len += sprintf(buf + len, "%s ", password);
-    len += sprintf(buf + len, "%d\n", 1); // active
+    len += sprintf(buf + len, "%d ", 1); // active
+    len += sprintf(buf + len, "%d\n", 0); // loggout
 
     write(fd_cust, buf, len);
     close(fd_cust);

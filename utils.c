@@ -1,5 +1,6 @@
 #include "utils.h"
 #include<semaphore.h>
+#include <sys/stat.h>
 
 #ifdef SERVER_SIDE // <-- ADDED
 extern sem_t *sem_userdb;
@@ -291,6 +292,161 @@ int add_user(const char *filename, const char *username, const char *password) {
     return 1;
 }
 
+/* ---------------------------
+   Helper: return base for a key
+   --------------------------- */
+static int base_for_key(const char *key) {
+    if (strcasecmp(key, "admin") == 0) return 100;
+    if (strcasecmp(key, "manager") == 0) return 200;
+    if (strcasecmp(key, "employee") == 0) return 300;
+    if (strcasecmp(key, "customer") == 0) return 400;
+    if (strcasecmp(key, "account") == 0) return 500;
+    if (strcasecmp(key, "loan") == 0) return 600;
+    if (strcasecmp(key, "feedback") == 0) return 700;
+    if (strcasecmp(key, "transaction") == 0) return 800;
+    return 1000;
+}
+
+/* ---------------------------
+   get_next_global_id(key)
+   - Atomically read/update id_tracker.txt under sem_userdb lock.
+   - Returns the new id (>= base), or -1 on error.
+   --------------------------- */
+   #ifdef SERVER_SIDE
+int get_next_global_id(const char *key) {
+    extern sem_t *sem_userdb; // declared in utils.h as extern
+    if (!key) return -1;
+
+    sem_wait(sem_userdb);
+
+    const char *tracker = "id_tracker.txt";
+    int fd = open(tracker, O_RDWR | O_CREAT, 0644);
+    if (fd == -1) {
+        sem_post(sem_userdb);
+        return -1;
+    }
+
+    struct stat st;
+    if (fstat(fd, &st) == -1) {
+        close(fd);
+        sem_post(sem_userdb);
+        return -1;
+    }
+
+    off_t sz = st.st_size;
+    char *buf = NULL;
+    if (sz > 0) {
+        buf = malloc(sz + 1);
+        if (!buf) {
+            close(fd);
+            sem_post(sem_userdb);
+            return -1;
+        }
+        ssize_t r = pread(fd, buf, sz, 0);
+        if (r < 0) {
+            free(buf);
+            close(fd);
+            sem_post(sem_userdb);
+            return -1;
+        }
+        buf[r] = '\0';
+        sz = r;
+    } else {
+        buf = strdup(""); // empty file
+        sz = 0;
+    }
+
+    /* Build new content in memory: we will rewrite the whole file */
+    // We'll scan existing lines, find the key, update its value.
+    int found = 0;
+    int new_value = 0;
+
+    // Prepare an output buffer (grow as needed)
+    size_t outcap = sz + 256;
+    char *out = malloc(outcap + 1);
+    if (!out) { free(buf); close(fd); sem_post(sem_userdb); return -1; }
+    out[0] = '\0';
+    size_t outlen = 0;
+
+    // Parse each line
+    char *saveptr = NULL;
+    char *line = strtok_r(buf, "\n", &saveptr);
+    while (line) {
+        // trim leading spaces
+        while (*line == ' ' || *line == '\t') line++;
+
+        char wkey[128];
+        int val = 0;
+        if (sscanf(line, "%127s %d", wkey, &val) == 2) {
+            if (strcasecmp(wkey, key) == 0) {
+                // found the key — increment
+                found = 1;
+                new_value = val + 1;
+                // append updated line to out
+                int needed = snprintf(NULL, 0, "%s %d\n", wkey, new_value) + 1;
+                if (outlen + needed > outcap) {
+                    outcap = outcap + needed + 512;
+                    out = realloc(out, outcap + 1);
+                    if (!out) { free(buf); close(fd); sem_post(sem_userdb); return -1; }
+                }
+                outlen += snprintf(out + outlen, outcap - outlen + 1, "%s %d\n", wkey, new_value);
+            } else {
+                // copy existing line as-is
+                int needed = strlen(line) + 2;
+                if (outlen + needed > outcap) {
+                    outcap = outcap + needed + 512;
+                    out = realloc(out, outcap + 1);
+                    if (!out) { free(buf); close(fd); sem_post(sem_userdb); return -1; }
+                }
+                outlen += snprintf(out + outlen, outcap - outlen + 1, "%s\n", line);
+            }
+        } else {
+            // line malformed — preserve as-is
+            int needed = strlen(line) + 2;
+            if (outlen + needed > outcap) {
+                outcap = outcap + needed + 512;
+                out = realloc(out, outcap + 1);
+                if (!out) { free(buf); close(fd); sem_post(sem_userdb); return -1; }
+            }
+            outlen += snprintf(out + outlen, outcap - outlen + 1, "%s\n", line);
+        }
+        line = strtok_r(NULL, "\n", &saveptr);
+    }
+
+    if (!found) {
+        // Add initial base value then increment to base+1
+        int base = base_for_key(key);
+        new_value = base + 1;
+        // append new line
+        int needed = snprintf(NULL, 0, "%s %d\n", key, new_value) + 1;
+        if (outlen + needed > outcap) {
+            outcap = outcap + needed + 512;
+            out = realloc(out, outcap + 1);
+            if (!out) { free(buf); close(fd); sem_post(sem_userdb); return -1; }
+        }
+        outlen += snprintf(out + outlen, outcap - outlen + 1, "%s %d\n", key, new_value);
+    }
+
+    // Write out content atomically: truncate then write
+    if (ftruncate(fd, 0) == -1) {
+        free(buf); free(out); close(fd); sem_post(sem_userdb); return -1;
+    }
+    if (lseek(fd, 0, SEEK_SET) == -1) {
+        free(buf); free(out); close(fd); sem_post(sem_userdb); return -1;
+    }
+    ssize_t w = write(fd, out, strlen(out));
+    // optional: fsync(fd);
+
+    free(buf);
+    free(out);
+    close(fd);
+    sem_post(sem_userdb);
+
+    if (w < 0) return -1;
+    return new_value;
+}
+
+#endif
 /* =========================================================
    GET NEXT ID FUNCTION (open/read)
    Returns max ID + 1 from file
