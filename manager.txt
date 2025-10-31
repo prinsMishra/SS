@@ -3,5 +3,5 @@
 4 employee2 employee2U@ 1 0
 5 manager1 manager123 1 1
 6 manager4 manager4@ 1 0
-7 manager5 manager5@ 1 0
-8 manager6 manager6@ 1 0
+7 manager5 manager5@ 1 1
+8 manager6 manager6@ 1 1

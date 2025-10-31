@@ -593,4 +593,41 @@ int receive_message(int sockfd, char *buffer, size_t size) {
     return 1;
 }
 
+#include <sys/stat.h>  // make sure this is present at top of utils.c
+
+int get_next_global_id(const char *context) {
+    (void)context;  // context optional for debugging
+    const char *counter_file = "global_id_counter.txt";
+    int fd = open(counter_file, O_RDWR | O_CREAT, 0644);
+    if (fd < 0) {
+        perror("open global_id_counter.txt");
+        return 1;
+    }
+
+    //sem_wait(sem_userdb); // lock globally while updating ID
+
+    // Read last ID
+    char buf[32];
+    int last_id = 0;
+    ssize_t n = read(fd, buf, sizeof(buf) - 1);
+    if (n > 0) {
+        buf[n] = '\0';
+        last_id = atoi(buf);
+    }
+
+    // Increment and save
+    int new_id = last_id + 1;
+    lseek(fd, 0, SEEK_SET);
+    ftruncate(fd, 0);
+
+    char new_id_str[32];
+    snprintf(new_id_str, sizeof(new_id_str), "%d\n", new_id);
+    write(fd, new_id_str, strlen(new_id_str));
+
+    //sem_post(sem_userdb);
+
+    close(fd);
+    return new_id;
+}
+
 

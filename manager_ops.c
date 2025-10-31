@@ -94,72 +94,33 @@ static void toggle_customer_active(int connfd) {
         return;
     }
 
-    char line[256];
+    char line[512];
     pos = 0;
     while ((bytes = read(fd_read, buffer, sizeof(buffer))) > 0) {
-        for (ssize_t i=0; i<bytes; i++) {
-            if (buffer[i] == '\n' || pos >= (int)sizeof(line)-1) {
+        for (ssize_t i = 0; i < bytes; i++) {
+            if (buffer[i] == '\n' || pos >= (int)sizeof(line) - 1) {
                 line[pos] = '\0';
                 pos = 0;
 
-                // parse from copy
-                char copy[256];
-                strncpy(copy, line, sizeof(copy)-1);
-                copy[sizeof(copy)-1] = '\0';
+                if (strlen(line) == 0) continue;
 
-                char *tok = strtok(copy, " ");
-                if (!tok) { // malformed -> keep as-is
-                    write(fd_write, line, strlen(line));
-                    write(fd_write, "\n", 1);
-                    continue;
-                }
-                int id = atoi(tok);
+                int id, active, logged_in;
+                char file_username[128], file_password[128];
 
-                tok = strtok(NULL, " ");
-                if (!tok) {
-                    write(fd_write, line, strlen(line));
-                    write(fd_write, "\n", 1);
-                    continue;
-                }
-                char file_username[128];
-                strncpy(file_username, tok, sizeof(file_username)-1);
-                file_username[sizeof(file_username)-1] = '\0';
+                // ✅ Parse 5 fields instead of 4
+                int parsed = sscanf(line, "%d %127s %127s %d %d",
+                                    &id, file_username, file_password, &active, &logged_in);
 
-                tok = strtok(NULL, " ");
-                if (!tok) {
-                    write(fd_write, line, strlen(line));
-                    write(fd_write, "\n", 1);
-                    continue;
-                }
-                char file_password[128];
-                strncpy(file_password, tok, sizeof(file_password)-1);
-                file_password[sizeof(file_password)-1] = '\0';
-
-                tok = strtok(NULL, " ");
-                if (!tok) {
-                    write(fd_write, line, strlen(line));
-                    write(fd_write, "\n", 1);
-                    continue;
-                }
-                int active = atoi(tok);
-
-                if (strcmp(file_username, username) == 0) {
+                if (parsed == 5 && strcmp(file_username, username) == 0) {
                     found = 1;
-                    // write updated line: id username password new_active
-                    char idbuf[16], actbuf[8];
-                    snprintf(idbuf, sizeof(idbuf), "%d", id);
-                    snprintf(actbuf, sizeof(actbuf), "%d", new_active);
-
-                    write(fd_write, idbuf, strlen(idbuf));
-                    write(fd_write, " ", 1);
-                    write(fd_write, file_username, strlen(file_username));
-                    write(fd_write, " ", 1);
-                    write(fd_write, file_password, strlen(file_password));
-                    write(fd_write, " ", 1);
-                    write(fd_write, actbuf, strlen(actbuf));
-                    write(fd_write, "\n", 1);
-                } else {
-                    // copy as-is
+                    logged_in = 0; // always force logout if changed
+                    char newline[512];
+                    snprintf(newline, sizeof(newline),
+                             "%d %s %s %d %d\n", id, file_username, file_password,
+                             new_active, logged_in);
+                    write(fd_write, newline, strlen(newline));
+                } else if (parsed >= 4) {
+                    // Preserve rest of file safely
                     write(fd_write, line, strlen(line));
                     write(fd_write, "\n", 1);
                 }
@@ -177,15 +138,23 @@ static void toggle_customer_active(int connfd) {
             send_message(connfd, "Error updating customer file.\n");
             unlink(temp_file);
         } else {
-            send_message(connfd, "Customer active status updated.\n");
+            send_message(connfd, "✅ Customer active status updated.\n");
         }
     } else {
         unlink(temp_file);
-        send_message(connfd, "Customer not found.\n");
+        send_message(connfd, "❌ Customer not found.\n");
     }
 
     sem_post(sem_userdb);
+
+    // ✅ If deactivated, disconnect live customer process if any
+    if (found && new_active == 0) {
+        // Optional system broadcast (only works if you track sessions)
+        // You can also just print:
+        printf("[INFO] Customer '%s' was deactivated — should be logged out.\n", username);
+    }
 }
+
 
 /* ------------------------------------------------------------
    3) Assign Loan Application Processes to Employees

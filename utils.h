@@ -19,13 +19,15 @@ int validate_login(const char *filename, const char *username, const char *passw
 /* ---------- User Management ---------- */
 int add_user(const char *filename, const char *username, const char *password);
 int get_next_id(const char *filename);
+int get_next_global_id(const char *filename);
+
 
 /* ---------- Input Utilities ---------- */
 void trim_newline(char *str);
 
 /* ---------- Error Handling ---------- */
 void error_exit(const char *msg);
-int get_next_global_id(const char *key);
+
 
 /* ---------- Socket Message Helpers ---------- */
 int send_message(int sockfd, const char *msg);
@@ -33,4 +35,5 @@ int receive_message(int sockfd, char *buffer, size_t size);
 int check_existing_user(const char *filename, const char *username);
 ssize_t read_line(int fd, char *buf, size_t maxlen);
 void mark_user_logged_out(const char *filename, const char *username);
+
 #endif // UTILS_H

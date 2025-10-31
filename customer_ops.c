@@ -566,6 +566,7 @@ void change_customer_password(int connfd, const char *username) {
 }
 
 
+
 void add_feedback(int connfd, const char *username) {
     char feedback[256];
 
@@ -578,7 +579,7 @@ void add_feedback(int connfd, const char *username) {
         return;
     }
 
-    sem_wait(sem_userdb);  // lock feedback file (safe shared use)
+    sem_wait(sem_userdb);  // 🔒 lock feedback file for safe shared use
 
     int fd = open("feedback_db.txt", O_WRONLY | O_APPEND | O_CREAT, 0644);
     if (fd == -1) {
@@ -587,15 +588,18 @@ void add_feedback(int connfd, const char *username) {
         return;
     }
 
-    int feedback_id = get_next_id("feedback_db.txt");
+    // ✅ use global unique ID generator instead of file-local
+    int feedback_id = get_next_global_id("feedback_db.txt");
 
     char entry[512];
     int len = snprintf(entry, sizeof(entry), "%d %s %s\n", feedback_id, username, feedback);
 
-    write(fd, entry, len);
-    close(fd);
+    if (write(fd, entry, len) != len) {
+        send_message(connfd, "⚠️ Warning: Failed to write full feedback entry.\n");
+    }
 
-    sem_post(sem_userdb);
+    close(fd);
+    sem_post(sem_userdb);  // 🔓 unlock after writing
 
     send_message(connfd, "✅ Thank you! Your feedback has been recorded.\n");
 }
